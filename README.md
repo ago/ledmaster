@@ -8,13 +8,16 @@ running in parallel will conquer for these two so each client has to obtain
 a lock before it can do anything.
 
 Start server by plain: ./server
+
 It should show a single "LED" on the console.
 
-Clients usage: ./client [OPTIONS]
+```
+Client's usage: ./client [OPTIONS]
 Options:
   -s|--state on|off            Turn led on or off
   -c|--color red|green|blue    Set led color
   -r|--rate 0..5               Set led blinking rate
   -h|--help                    Show this help text
+```
 
 If started without options client will just query the server's state.
