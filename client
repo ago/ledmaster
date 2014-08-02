@@ -1,0 +1,87 @@
+#!/bin/sh
+
+PROG="$0"
+SET_STATE=""
+SET_COLOR=""
+SET_RATE=""
+
+usage() {
+	echo "Usage: $PROG [OPTIONS]"
+	echo "Options:"
+	echo "  -s|--state on|off            Turn led on or off"
+	echo "  -c|--color red|green|blue    Set led color"
+	echo "  -r|--rate 0..5               Set led blinking rate"
+	echo "  -h|--help                    Show this help text"
+	echo
+	exit 1
+}
+
+_send_cmd() {
+	head -n 1 fifo_out &
+	echo "$*" > fifo_in
+	wait
+}
+
+RESULT=""
+
+send_cmd() {
+	res=$(_send_cmd "$*")
+	st=$(echo "$res" | cut -f1 -d' ')
+	if [ "$st" != "OK" ]; then
+		RESULT=""
+		return 1
+	fi
+	RESULT=$(echo "$res" | cut -s -f2 -d' ')
+	return 0
+}
+
+print_led_data() {
+	send_cmd get-led-state || return 1
+	state="$RESULT"
+	send_cmd get-led-color || return 1
+	color="$RESULT"
+	send_cmd get-led-rate || return 1
+	rate="$RESULT"
+	echo "Led is $state, color is $color, blink rate is $rate"
+}
+
+# parse options first
+if ! options=$(getopt -o s:c:r:h -l state:,color:,rate:,help -- "$@")
+then
+	# something went wrong, getopt will put out an error message for us
+	exit 1
+fi
+
+eval set -- "$options"
+
+while [ $# -gt 0 ]; do
+	case $1 in
+		-s|--state) SET_STATE="$2"; shift ;;
+		-c|--color) SET_COLOR="$2"; shift ;;
+		-r|--rate) SET_RATE="$2"; shift ;;
+		-h|--help) usage ;;
+		(--) shift; break ;;
+		(-*) echo "$PROG: error - unrecognized option $1" 1>&2; exit 1 ;;
+		(*) break ;;
+	esac
+	shift
+done
+
+[ $# -ne 0 ] && usage
+
+# lock fifo to avoid races with other clients
+( flock -x -w 10 9 || exit 1
+	[ "$SET_STATE" ] && if ! send_cmd set-led-state "$SET_STATE"; then
+		echo "Failed to set state to $SET_STATE"
+		return 1
+	fi
+	[ "$SET_COLOR" ] && if ! send_cmd set-led-color "$SET_COLOR"; then
+		echo "Failed to set color to $SET_COLOR"
+		return 1
+	fi
+	[ "$SET_RATE" ] && if ! send_cmd set-led-rate "$SET_RATE"; then
+		echo "Failed to set rate to $SET_RATE"
+		return 1
+	fi
+	print_led_data
+) 9>fifo_in
